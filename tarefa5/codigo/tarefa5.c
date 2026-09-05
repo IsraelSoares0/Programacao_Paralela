@@ -22,7 +22,7 @@ bool verificar_primo(int num) {
     return true;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     int valores_n[] = {1000000, 5000000, 10000000, 15000000, 20000000};
     int qtd_valores = sizeof(valores_n) / sizeof(valores_n[0]);
 

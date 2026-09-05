@@ -68,9 +68,9 @@ static double agora(void) {
 }
 
 int main(int argc, char **argv) {
-    int tamanhos_padrao[] = {64, 128, 256, 512, 1024, 2048, 4096, 8192};
+    int tamanhos_padrao[] = {64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384};
     int n_tam = sizeof(tamanhos_padrao) / sizeof(tamanhos_padrao[0]);
-    int repeticoes = 5; /* repete cada medição e usa o menor tempo (reduz ruído) */
+    int repeticoes = 5;
 
     printf("%10s %14s %14s %10s\n",
            "N", "linhas (s)", "colunas (s)", "razao");

@@ -1,0 +1,206 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+% Nomes em português (o ambiente de compilação não possui os padrões de
+% hifenização do babel para português instalados, por isso os nomes são
+% redefinidos manualmente em vez de carregar o pacote babel)
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\lstlistingname}{Código}
+
+% ---------- Configuração do realce de sintaxe (C) ----------
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{framecolor}{RGB}{200,200,200}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{gray},
+    numbers=left,
+    numbersep=6pt,
+    frame=single,
+    rulecolor=\color{framecolor},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    columns=flexible,
+    morekeywords={size_t},
+    extendedchars=true,
+    literate=
+        {á}{{\'a}}1 {à}{{\`a}}1 {â}{{\^a}}1 {ã}{{\~a}}1
+        {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1
+        {ó}{{\'o}}1 {ô}{{\^o}}1 {õ}{{\~o}}1
+        {ú}{{\'u}}1 {ü}{{\"u}}1 {ç}{{\c c}}1
+        {Á}{{\'A}}1 {À}{{\`A}}1 {Â}{{\^A}}1 {Ã}{{\~A}}1
+        {É}{{\'E}}1 {Ê}{{\^E}}1 {Í}{{\'I}}1
+        {Ó}{{\'O}}1 {Ô}{{\^O}}1 {Õ}{{\~O}}1
+        {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
+}
+
+\title{Multiplicação de Matriz por Vetor: \\ Localidade Temporal e Espacial no Acesso à Memória}
+\author{}
+\date{1 de setembro de 2026}
+
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+Este relatório apresenta a implementação de um programa em linguagem C para
+comparar duas formas de percorrer os elementos de uma matriz durante a
+multiplicação de matriz por vetor (MxV), avaliando o impacto do padrão de
+acesso à memória sobre o desempenho:
+
+\begin{itemize}
+    \item \textbf{Versão por linhas}: o laço externo percorre as linhas $i$ e o
+    laço interno percorre as colunas $j$, de modo que os elementos $A[i][j]$ são
+    acessados sequencialmente na memória (\emph{stride} 1).
+    \item \textbf{Versão por colunas}: o laço externo percorre as colunas $j$ e o
+    laço interno percorre as linhas $i$, de modo que os elementos $A[i][j]$ são
+    acessados com um salto de $N$ posições a cada passo (\emph{stride} $N$), pois
+    em C as matrizes são armazenadas em ordem \emph{row-major} (por linhas).
+\end{itemize}
+
+O objetivo é identificar a partir de que tamanho de matriz os tempos de execução
+das duas versões passam a divergir de forma significativa e explicar essa
+divergência com base no funcionamento da memória \emph{cache}.
+
+\section{Metodologia}
+
+O programa aloca uma matriz quadrada $N \times N$ como um único bloco contíguo de
+memória e mede o tempo de execução de cada versão do algoritmo com a função
+\texttt{clock\_gettime()} (relógio \texttt{CLOCK\_MONOTONIC} da biblioteca
+\texttt{time.h}), que oferece alta resolução e não é afetada por ajustes do
+relógio do sistema. Para cada tamanho de matriz $N$ (variando entre $64$ e
+$16384$, em potências de 2), cada versão foi executada 5 vezes, sendo
+registrado o menor tempo obtido, de forma a reduzir o ruído de medição causado
+por outras tarefas do sistema operacional. O código completo, compilado com
+\texttt{gcc -O2 -o mxv mxv.c}, é apresentado no Código~\ref{lst:mxv}.
+
+\lstinputlisting[style=cstyle, caption={Código-fonte \texttt{tarefa2.c} -- multiplicação matriz-vetor com dois padrões de acesso à memória.}, label={lst:mxv}]{../codigo/tarefa2.c}
+
+\section{Resultados}
+
+A Tabela~\ref{tab:resultados} apresenta os tempos de execução (em segundos,
+melhor caso entre 5 repetições) das duas versões do algoritmo, além da razão
+entre o tempo da versão por colunas e o tempo da versão por linhas.
+
+\begin{table}[h]
+\centering
+\caption{Tempos de execução da multiplicação MxV por linhas e por colunas}
+\label{tab:resultados}
+\begin{tabular}{rrrr}
+\toprule
+N & Linhas (s) & Colunas (s) & Razão (col./lin.) \\
+\midrule
+64      & 0,000004 & 0,000004 & $1{,}03\times$  \\
+128     & 0,000018 & 0,000017 & $0{,}94\times$  \\
+256     & 0,000075 & 0,000144 & $1{,}91\times$  \\
+512     & 0,000222 & 0,001498 & $6{,}75\times$  \\
+1.024   & 0,000938 & 0,008236 & $8{,}78\times$  \\
+2.048   & 0,003564 & 0,051392 & $14{,}42\times$ \\
+4.096   & 0,014300 & 0,379421 & $26{,}53\times$ \\
+8.192   & 0,057248 & 3,403755 & $59{,}46\times$ \\
+16.384  & 0,267308 & 8,399817 & $31{,}42\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Análise}
+
+\subsection{Ponto de divergência dos tempos}
+
+Para matrizes pequenas ($N = 64$ e $N = 128$), os tempos das duas versões são
+praticamente idênticos (razão próxima de $1\times$). A partir de $N = 256$ a
+diferença começa a aparecer (razão de aproximadamente $1{,}9\times$) e cresce de
+forma acentuada e consistente até $N = 8192$, onde a versão por colunas chega a
+ser quase 60 vezes mais lenta que a versão por linhas. Pode-se dizer, portanto,
+que a divergência \emph{significativa} de desempenho passa a ocorrer a partir de
+$N \approx 256$--$512$, tornando-se dramática para $N \geq 2048$.
+
+\subsection{Relação com a hierarquia de memória (cache)}
+
+O comportamento observado é explicado diretamente pelo conceito de
+\textbf{localidade espacial} e pela forma como a matriz é armazenada na memória.
+Em C, uma matriz bidimensional é organizada em ordem \emph{row-major}: os
+elementos de uma mesma linha ficam contíguos na memória, enquanto elementos de
+uma mesma coluna estão separados por $N$ posições (uma linha inteira).
+
+Na versão por linhas, o acesso sequencial (\emph{stride} 1) faz com que, ao
+carregar um elemento, todo o bloco de memória ao seu redor (a \emph{cache
+line}, tipicamente 64 bytes, ou seja, 8 valores \texttt{double}) seja
+aproveitado nos acessos seguintes, gerando muitos \emph{cache hits}. Já na
+versão por colunas, cada acesso salta $N$ posições (\emph{stride} $N$): para
+valores de $N$ suficientemente grandes, cada acesso cai em uma linha de cache
+diferente, gerando \emph{cache misses} frequentes e obrigando o processador a
+buscar dados repetidamente na memória principal, muito mais lenta que a cache.
+
+\subsection{Por que a diferença só aparece a partir de certo tamanho}
+
+Para matrizes pequenas, o conjunto de dados inteiro cabe (ou quase cabe) nas
+caches L1/L2 do processador, de modo que mesmo os acessos com \emph{stride}
+grande acabam sendo atendidos pela cache na maior parte do tempo. À medida que
+$N$ cresce, o tamanho da matriz ($N^2 \times 8$ bytes) ultrapassa a capacidade
+das caches L1, depois L2 e eventualmente L3, e a taxa de \emph{cache misses} da
+versão por colunas aumenta continuamente -- exatamente o efeito observado no
+crescimento da razão entre os tempos até $N = 8192$. A leve queda da razão em
+$N = 16384$ ocorre porque, nesse ponto, mesmo a versão por linhas já não cabe
+inteiramente nas caches mais rápidas, de modo que seu tempo também passa a ser
+dominado por acessos à memória principal, reduzindo a vantagem relativa entre as
+duas versões.
+
+\subsection{Localidade temporal}
+
+Além da localidade espacial, há também um componente de localidade
+\textbf{temporal} relevante: o vetor \texttt{v} é reutilizado em todas as
+iterações do laço. Na versão por linhas, cada elemento \texttt{v[j]} é acessado
+repetidamente em iterações próximas, favorecendo sua permanência na cache, e a
+variável acumuladora \texttt{soma} é mantida em registrador durante toda a soma
+de uma linha. Esses fatores reforçam ainda mais a vantagem da versão por linhas
+sobre a versão por colunas.
+
+\section{Reflexão: aplicações reais}
+
+O padrão observado neste experimento -- programas com a mesma complexidade
+assintótica apresentando desempenho drasticamente diferente conforme o padrão
+de acesso à memória -- se repete em diversas áreas da computação:
+
+\begin{itemize}
+    \item \textbf{Álgebra linear e computação científica:} bibliotecas de alto
+    desempenho (como BLAS/LAPACK) reorganizam laços e utilizam técnicas de
+    \emph{blocking}/\emph{tiling} exatamente para maximizar a reutilização de
+    dados na cache em operações com matrizes grandes, obtendo ganhos de
+    desempenho semelhantes aos observados aqui.
+
+    \item \textbf{Bancos de dados:} o formato de armazenamento de tabelas
+    (orientado a linhas ou a colunas) é escolhido de acordo com o padrão de
+    acesso predominante da aplicação -- sistemas OLTP tendem a usar
+    armazenamento por linhas, enquanto sistemas analíticos (OLAP) costumam usar
+    armazenamento por colunas, cada um otimizado para seu próprio padrão de
+    varredura.
+
+    \item \textbf{Processamento de imagens e aprendizado de máquina:} operações
+    sobre tensores multidimensionais (convoluções, multiplicações de matrizes em
+    redes neurais) são altamente sensíveis à ordem de acesso à memória; por
+    isso, frameworks como cuDNN e cuBLAS investem pesadamente em otimizações de
+    localidade de memória
