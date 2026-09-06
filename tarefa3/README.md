@@ -12,9 +12,9 @@ Implemente três laços em C para investigar os efeitos do paralelismo ao nível
 
 Compile com diferentes níveis de otimização e compare os tempos:
 
-- `gcc -O0 -o ilp_O0 ilp_pipeline.c`
-- `gcc -O2 -o ilp_O2 ilp_pipeline.c`
-- `gcc -O3 -o ilp_O3 ilp_pipeline.c`
+- `$ gcc -O0 -o ilp_O0 ilp_pipeline.c`
+- `$ gcc -O2 -o ilp_O2 ilp_pipeline.c`
+- `$ gcc -O3 -o ilp_O3 ilp_pipeline.c`
 
 Execute várias vezes cada binário para obter uma média confiável:
 
