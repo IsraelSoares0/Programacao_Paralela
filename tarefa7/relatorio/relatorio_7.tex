@@ -1,0 +1,168 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\lstlistingname}{Código}
+
+% ---------- Configuração do realce de sintaxe (C) ----------
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{framecolor}{RGB}{200,200,200}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{gray},
+    numbers=left,
+    numbersep=6pt,
+    frame=single,
+    rulecolor=\color{framecolor},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    columns=flexible,
+    morekeywords={size_t},
+    extendedchars=true,
+    literate=
+        {á}{{\'a}}1 {à}{{\`a}}1 {â}{{\^a}}1 {ã}{{\~a}}1
+        {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1
+        {ó}{{\'o}}1 {ô}{{\^o}}1 {õ}{{\~o}}1
+        {ú}{{\'u}}1 {ü}{{\"u}}1 {ç}{{\c c}}1
+        {Á}{{\'A}}1 {À}{{\`A}}1 {Â}{{\^A}}1 {Ã}{{\~A}}1
+        {É}{{\'E}}1 {Ê}{{\^E}}1 {Í}{{\'I}}1
+        {Ó}{{\'O}}1 {Ô}{{\^O}}1 {Õ}{{\~O}}1
+        {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
+}
+
+\title{Processamento de Lista Encadeada com Tasks em OpenMP}
+\author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+Este relatório descreve a implementação e a análise de um programa em linguagem C que combina uma estrutura de dados clássica -- a lista encadeada -- 
+com o modelo de paralelismo baseado em tarefas (\textit{tasks}) da biblioteca OpenMP. 
+
+O objetivo é construir uma lista encadeada em que cada nó armazena o nome de um arquivo fictício e, 
+dentro de uma região paralela, percorrer essa lista criando uma tarefa (\texttt{\#pragma omp task}) responsável por processar cada nó individualmente. 
+
+Cada tarefa imprime o nome do arquivo que processou e o identificador da thread que a executou, 
+obtido por meio da função \texttt{omp\_get\_thread\_num()}. A partir dos resultados obtidos, 
+este trabalho também discute questões relacionadas à correção do processamento paralelo, como a garantia de que cada nó seja processado exatamente uma vez e por uma única tarefa.
+
+\section{Metodologia}
+
+A lista encadeada é construída sequencialmente, antes da entrada na região paralela, 
+com dez nós, cada um armazenando o nome de um arquivo fictício no formato \texttt{arquivo\_NN.dat}.
+
+Dentro da região \texttt{\#pragma omp parallel}, o percurso da lista é feito por uma única thread, 
+delimitada pela diretiva \texttt{\#pragma omp single nowait}. 
+
+Essa escolha é fundamental: caso todas as threads do time percorressem a lista, cada uma criaria uma tarefa para cada nó, 
+resultando em processamento duplicado (o nó seria processado tantas vezes quanto o número de threads). A cláusula \texttt{nowait} evita uma barreira desnecessária 
+ao final do \texttt{single}, permitindo que as threads ociosas comecem a executar as tarefas já criadas assim que possível.
+
+Para cada nó visitado, uma tarefa é criada com:
+
+- \texttt{\#pragma omp task firstprivate(no\_da\_vez)}. 
+
+O uso da cláusula \texttt{firstprivate} é essencial para a correção do programa: ela copia o valor do ponteiro para o nó no exato momento da criação da tarefa. 
+
+Sem essa cláusula, a variável de percurso seria compartilhada por padrão dentro da tarefa e poderia ser alterada pelo laço antes que a tarefa fosse efetivamente executada, 
+fazendo com que múltiplas tarefas apontassem para o mesmo nó (tipicamente o último da lista).
+
+Cada tarefa executa a função \texttt{processar\_arquivo}, que imprime o nome do arquivo e o 
+identificador da thread corrente (\texttt{omp\_get\_thread\_num()}). Ao final da região paralela, 
+a barreira implícita garante que todas as tarefas tenham concluído sua execução antes que a memória da lista seja liberada. 
+O código-fonte completo encontra-se no Apêndice~\ref{sec:codigo}.
+
+\section{Resultados}
+
+A execução do programa produziu a seguinte saída, na ordem em que as linhas foram impressas:
+
+\begin{lstlisting}[style=cstyle, language=, numbers=none]
+Arquivo 'arquivo_02.dat' processado pela thread 3
+Arquivo 'arquivo_05.dat' processado pela thread 1
+Arquivo 'arquivo_04.dat' processado pela thread 4
+Arquivo 'arquivo_06.dat' processado pela thread 3
+Arquivo 'arquivo_03.dat' processado pela thread 5
+Arquivo 'arquivo_01.dat' processado pela thread 2
+Arquivo 'arquivo_07.dat' processado pela thread 1
+Arquivo 'arquivo_08.dat' processado pela thread 2
+Arquivo 'arquivo_09.dat' processado pela thread 6
+Arquivo 'arquivo_10.dat' processado pela thread 9
+\end{lstlisting}
+
+A Tabela~\ref{tab:resultados} reorganiza essa saída por ordem de arquivo, facilitando a verificação de que todos os nós foram processados.
+
+\begin{table}[h]
+\centering
+\caption{Arquivo processado e thread responsável}
+\label{tab:resultados}
+\begin{tabular}{@{}cc@{}}
+\toprule
+\textbf{Arquivo} & \textbf{Thread} \\
+\midrule
+arquivo\_01.dat & 2 \\
+arquivo\_02.dat & 3 \\
+arquivo\_03.dat & 5 \\
+arquivo\_04.dat & 4 \\
+arquivo\_05.dat & 1 \\
+arquivo\_06.dat & 3 \\
+arquivo\_07.dat & 1 \\
+arquivo\_08.dat & 2 \\
+arquivo\_09.dat & 6 \\
+arquivo\_10.dat & 9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Verifica-se que os dez arquivos (\texttt{arquivo\_01.dat} a \texttt{arquivo\_10.dat}) aparecem exatamente uma vez cada na saída, totalizando as dez linhas esperadas. Nenhum arquivo foi omitido e nenhum foi processado mais de uma vez.
+
+\section{Análise}
+
+\textbf{Cobertura e unicidade do processamento.} Como mostrado na Tabela~\ref{tab:resultados}, cada um dos dez nós da lista foi processado exatamente uma vez, o que confirma a correção da estratégia adotada: a combinação de \texttt{single} (para que apenas uma thread crie as tarefas) com \texttt{firstprivate} (para que cada tarefa capture o ponteiro correto do nó) evita tanto a duplicação quanto a omissão de nós.
+
+\textbf{Distribuição entre threads.} A distribuição das tarefas entre as threads não é uniforme: as threads 1, 2 e 3 processaram dois arquivos cada, enquanto as threads 4, 5, 6 e 9 processaram apenas um arquivo cada. Essa distribuição desigual é esperada, pois o escalonador de tarefas do OpenMP atribui as tarefas dinamicamente às threads ociosas conforme elas terminam seu trabalho anterior -- não há garantia de balanceamento perfeito, especialmente com uma carga de trabalho tão pequena (dez tarefas curtas). A presença de identificadores de thread não sequenciais entre os que aparecem na saída (por exemplo, a ausência das threads 0, 7 e 8 no conjunto observado) apenas reflete que, para essa execução específica, nem todas as threads do time chegaram a receber uma tarefa antes que a lista fosse totalmente percorrida.
+
+\textbf{Ordem de impressão.} A ordem em que as linhas aparecem na saída (por exemplo, \texttt{arquivo\_02.dat} antes de \texttt{arquivo\_01.dat}) não corresponde à ordem dos nós na lista encadeada. Isso é uma consequência natural do paralelismo: as tarefas são criadas na ordem da lista, mas sua execução e a impressão do resultado dependem de quando cada thread fica disponível para executá-las. Em execuções repetidas do mesmo programa, é esperado que essa ordem varie, assim como pode variar qual thread processa qual arquivo, embora o conjunto de arquivos processados (exatamente uma vez cada) permaneça sempre o mesmo, por construção.
+
+\textbf{Garantia de processamento único.} A robustez do programa depende de três elementos estruturais, e não de sorte na execução: (i) o percurso da lista restrito a uma única thread via \texttt{single}, evitando que múltiplas threads criem tarefas para o mesmo conjunto de nós; (ii) a cláusula \texttt{firstprivate} na variável que referencia o nó atual, garantindo que cada tarefa opere sobre o nó correto mesmo que a variável de laço mude antes da execução efetiva da tarefa; e (iii) a barreira implícita ao final da região \texttt{parallel} (que poderia também ser obtida explicitamente com \texttt{\#pragma omp taskwait}), assegurando que todas as tarefas concluam antes que recursos como a lista sejam liberados.
+
+\section{Conclusão}
+
+O experimento confirmou que é possível processar de forma paralela e correta cada nó de uma lista encadeada utilizando tarefas OpenMP, desde que sejam respeitadas as práticas de criação de tarefas em uma região paralela: percurso serial da lista dentro de um bloco \texttt{single} e captura por valor (\texttt{firstprivate}) da referência ao nó em cada tarefa criada. Nos resultados obtidos, todos os dez arquivos foram processados exatamente uma vez, sem duplicações ou omissões, ainda que a ordem de processamento e a thread responsável por cada arquivo variem entre execuções devido à natureza dinâmica do escalonador de tarefas do OpenMP. Esse comportamento é esperado e não compromete a corretude do programa, pois a garantia de unicidade decorre da estrutura do código e não da ordem de execução das threads.
+
+\newpage
+\appendix
+
+\section{Código-Fonte}
+\label{sec:codigo}
+
+O código-fonte completo utilizado nesta atividade está disponível em \texttt{../src/tarefa7.c} e é reproduzido abaixo.
+
+\lstinputlisting[style=cstyle, caption={Código-fonte completo (\texttt{tarefa7.c})}]{../src/tarefa7.c}
+
+\end{document}
