@@ -86,7 +86,9 @@ ao final do \texttt{single}, permitindo que as threads ociosas comecem a executa
 
 Para cada nó visitado, uma tarefa é criada com:
 
-- \texttt{\#pragma omp task firstprivate(no\_da\_vez)}. 
+\begin{itemize}
+    \item \texttt{\#pragma omp task firstprivate(no\_da\_vez)}. 
+\end{itemize}
 
 O uso da cláusula \texttt{firstprivate} é essencial para a correção do programa: ela copia o valor do ponteiro para o nó no exato momento da criação da tarefa. 
 
@@ -147,9 +149,17 @@ Verifica-se que os dez arquivos (\texttt{arquivo\_01.dat} a \texttt{arquivo\_10.
 
 \textbf{Distribuição entre threads.} A distribuição das tarefas entre as threads não é uniforme: as threads 1, 2 e 3 processaram dois arquivos cada, enquanto as threads 4, 5, 6 e 9 processaram apenas um arquivo cada. Essa distribuição desigual é esperada, pois o escalonador de tarefas do OpenMP atribui as tarefas dinamicamente às threads ociosas conforme elas terminam seu trabalho anterior -- não há garantia de balanceamento perfeito, especialmente com uma carga de trabalho tão pequena (dez tarefas curtas). A presença de identificadores de thread não sequenciais entre os que aparecem na saída (por exemplo, a ausência das threads 0, 7 e 8 no conjunto observado) apenas reflete que, para essa execução específica, nem todas as threads do time chegaram a receber uma tarefa antes que a lista fosse totalmente percorrida.
 
-\textbf{Ordem de impressão.} A ordem em que as linhas aparecem na saída (por exemplo, \texttt{arquivo\_02.dat} antes de \texttt{arquivo\_01.dat}) não corresponde à ordem dos nós na lista encadeada. Isso é uma consequência natural do paralelismo: as tarefas são criadas na ordem da lista, mas sua execução e a impressão do resultado dependem de quando cada thread fica disponível para executá-las. Em execuções repetidas do mesmo programa, é esperado que essa ordem varie, assim como pode variar qual thread processa qual arquivo, embora o conjunto de arquivos processados (exatamente uma vez cada) permaneça sempre o mesmo, por construção.
+\textbf{Ordem de impressão.} A ordem em que as linhas aparecem na saída (por exemplo, \texttt{arquivo\_02.dat} antes de \texttt{arquivo\_01.dat}) não corresponde à ordem dos nós na lista encadeada. 
+Isso é uma consequência natural do paralelismo: as tarefas são criadas na ordem da lista, mas sua execução e a impressão do resultado dependem de quando cada thread fica disponível para executá-las. 
+Em execuções repetidas do mesmo programa, é esperado que essa ordem varie, assim como pode variar qual thread processa qual arquivo, embora o conjunto de arquivos processados (exatamente uma vez cada) permaneça sempre o mesmo, por construção.
 
-\textbf{Garantia de processamento único.} A robustez do programa depende de três elementos estruturais, e não de sorte na execução: (i) o percurso da lista restrito a uma única thread via \texttt{single}, evitando que múltiplas threads criem tarefas para o mesmo conjunto de nós; (ii) a cláusula \texttt{firstprivate} na variável que referencia o nó atual, garantindo que cada tarefa opere sobre o nó correto mesmo que a variável de laço mude antes da execução efetiva da tarefa; e (iii) a barreira implícita ao final da região \texttt{parallel} (que poderia também ser obtida explicitamente com \texttt{\#pragma omp taskwait}), assegurando que todas as tarefas concluam antes que recursos como a lista sejam liberados.
+\textbf{Garantia de processamento único.} A robustez do programa depende de três elementos estruturais, e não de sorte na execução: 
+
+\begin{enumerate}
+    \item O percurso da lista restrito a uma única thread via \texttt{single}, evitando que múltiplas threads criem tarefas para o mesmo conjunto de nós;
+    \item A cláusula \texttt{firstprivate} na variável que referencia o nó atual, garantindo que cada tarefa opere sobre o nó correto mesmo que a variável de laço mude antes da execução efetiva da tarefa;
+    \item A barreira implícita ao final da região \texttt{parallel} (que poderia também ser obtida explicitamente com \texttt{\#pragma omp taskwait}), assegurando que todas as tarefas concluam antes que recursos como a lista sejam liberados.
+\end{enumerate}
 
 \section{Conclusão}
 
