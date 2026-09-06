@@ -32,8 +32,7 @@ void inicializa_vetor(double *v, int n) {
     }
 }
 
-/* ---------------------------------------------------------------------
- * Laço 2: soma acumulativa com dependência (uma única variável)
+// Laço 2: soma acumulativa com dependência (uma única variável)
  
 double soma_dependente(double *v, int n) {
     double soma = 0.0;
@@ -43,14 +42,8 @@ double soma_dependente(double *v, int n) {
     return soma;
 }
 
-/* ---------------------------------------------------------------------
- * Laço 3: soma com múltiplos acumuladores (quebra a dependência)
- * Usamos 4 variáveis independentes entre si. Dentro de cada uma delas
- * ainda existe dependência serial, mas como são 4 cadeias
- * independentes, o processador (ou o compilador vetorizando) pode
- * executar as 4 somas em paralelo, aproveitando melhor o pipeline e as
- * unidades funcionais disponíveis. Ao final, somamos os 4 parciais.
- * --------------------------------------------------------------------- */
+// Laço 3: soma com múltiplos acumuladores (quebra a dependência)
+
 double soma_independente(double *v, int n) {
     double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
     int i;

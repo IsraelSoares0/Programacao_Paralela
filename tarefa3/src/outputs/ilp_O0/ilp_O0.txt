@@ -1,0 +1,29 @@
+Output1:
+
+Vetor de 100000000 elementos, 5 repeticoes por la├ºo
+
+Laco 1 (inicializacao)........: 0.0977 s
+Laco 2 (soma dependente)......: 0.1654 s   (resultado = 2500000075000000.00)
+Laco 3 (soma c/ 4 acumuladores): 0.0574 s   (resultado = 2500000075000000.00)
+
+Speedup do laco 3 em relacao ao laco 2: 2.88x
+
+Output2:
+
+Vetor de 100000000 elementos, 5 repeticoes por la├ºo
+
+Laco 1 (inicializacao)........: 0.1058 s
+Laco 2 (soma dependente)......: 0.1655 s   (resultado = 2500000075000000.00)
+Laco 3 (soma c/ 4 acumuladores): 0.0589 s   (resultado = 2500000075000000.00)
+
+Speedup do laco 3 em relacao ao laco 2: 2.81x
+
+Output3:
+
+Vetor de 100000000 elementos, 5 repeticoes por la├ºo
+
+Laco 1 (inicializacao)........: 0.0891 s
+Laco 2 (soma dependente)......: 0.1629 s   (resultado = 2500000075000000.00)
+Laco 3 (soma c/ 4 acumuladores): 0.0580 s   (resultado = 2500000075000000.00)
+
+Speedup do laco 3 em relacao ao laco 2: 2.81x

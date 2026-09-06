@@ -1,0 +1,188 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\lstlistingname}{Código}
+
+% ---------- Configuração do realce de sintaxe (C) ----------
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{framecolor}{RGB}{200,200,200}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{gray},
+    numbers=left,
+    numbersep=6pt,
+    frame=single,
+    rulecolor=\color{framecolor},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    columns=flexible,
+    morekeywords={size_t},
+    extendedchars=true,
+    literate=
+        {á}{{\'a}}1 {à}{{\`a}}1 {â}{{\^a}}1 {ã}{{\~a}}1
+        {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1
+        {ó}{{\'o}}1 {ô}{{\^o}}1 {õ}{{\~o}}1
+        {ú}{{\'u}}1 {ü}{{\"u}}1 {ç}{{\c c}}1
+        {Á}{{\'A}}1 {À}{{\`A}}1 {Â}{{\^A}}1 {Ã}{{\~A}}1
+        {É}{{\'E}}1 {Ê}{{\^E}}1 {Í}{{\'I}}1
+        {Ó}{{\'O}}1 {Ô}{{\^O}}1 {Õ}{{\~O}}1
+        {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
+}
+
+\title{Investigação dos Efeitos do Paralelismo ao Nível de Instrução (ILP): \\
+Pipeline, Dependências e Vetorização em C}
+\author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+Processadores modernos utilizam \textit{pipelining} e múltiplas unidades funcionais para executar instruções de forma sobreposta, explorando o chamado paralelismo ao nível de instrução (\textit{Instruction-Level Parallelism} -- ILP). No entanto, esse paralelismo só pode ser aproveitado quando não há dependências verdadeiras (\textit{read-after-write}) entre instruções consecutivas: quando uma instrução precisa do resultado da anterior para ser executada, o processador é forçado a esperar, criando bolhas no pipeline e reduzindo o throughput de instruções por ciclo (IPC).
+
+O objetivo deste trabalho é investigar experimentalmente esses efeitos por meio de três laços escritos em linguagem C: (1) um laço de inicialização de vetor, cujas iterações são independentes entre si; (2) um laço de soma acumulativa com uma única variável, que cria uma cadeia de dependência serial entre iterações; e (3) uma versão da soma que quebra essa dependência distribuindo o acúmulo em quatro variáveis independentes. Os três laços foram compilados com diferentes níveis de otimização do GCC (\texttt{-O0}, \texttt{-O2} e \texttt{-O3}), e os tempos de execução foram comparados para avaliar como o estilo do código-fonte e a presença de dependências entre iterações influenciam o desempenho final, tanto na ausência quanto na presença de otimizações automáticas do compilador.
+
+\section{Metodologia}
+
+Foi implementado um programa em C (Código~\ref{cod:fonte}, no Apêndice~\ref{sec:codigo}) contendo três funções:
+
+\begin{itemize}
+    \item \textbf{Laço 1 -- Inicialização do vetor:} preenche um vetor de $N = 10^8$ elementos \texttt{double} com a expressão \texttt{v[i] = i * 0.5 + 1.0}. Cada elemento depende apenas do índice \texttt{i}, portanto não há dependência entre iterações.
+    \item \textbf{Laço 2 -- Soma dependente:} acumula os elementos do vetor em uma única variável (\texttt{soma += v[i]}), criando uma cadeia de dependência estritamente serial: a adição da iteração $i$ só pode começar depois que o resultado da iteração $i-1$ estiver disponível.
+    \item \textbf{Laço 3 -- Soma independente (múltiplos acumuladores):} distribui a soma em quatro variáveis (\texttt{s0}, \texttt{s1}, \texttt{s2}, \texttt{s3}), processando os elementos em grupos de quatro. Cada uma das quatro cadeias ainda é serial internamente, porém as quatro cadeias são independentes entre si e podem, em princípio, ser executadas em paralelo pelo processador ou vetorizadas pelo compilador.
+\end{itemize}
+
+O tempo de cada laço foi medido com \texttt{clock\_gettime(CLOCK\_MONOTONIC, \ldots)}, tomando a média de 5 repetições por execução, a fim de reduzir a influência de ruído do sistema operacional. O programa foi compilado três vezes com o GCC, variando apenas o nível de otimização:
+
+\begin{itemize}
+    \item \texttt{gcc -O0 -o ilp\_O0 ilp\_pipeline.c}
+    \item \texttt{gcc -O2 -o ilp\_O2 ilp\_pipeline.c}
+    \item \texttt{gcc -O3 -o ilp\_O3 ilp\_pipeline.c}
+\end{itemize}
+
+Cada um dos três binários foi executado 3 vezes, e os tempos médios de cada laço, junto com o \textit{speedup} do Laço 3 em relação ao Laço 2, foram registrados para análise.
+
+\section{Resultados}
+
+A Tabela~\ref{tab:execucoes} apresenta os tempos brutos (em segundos) obtidos nas três execuções de cada binário, e a Tabela~\ref{tab:medias} resume as médias por nível de otimização.
+
+\begin{table}[h]
+\centering
+\caption{Tempos de execução (em segundos) das três execuções de cada binário}
+\label{tab:execucoes}
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{Otimização} & \textbf{Execução} & \textbf{Laço 1} & \textbf{Laço 2} & \textbf{Laço 3} \\
+\midrule
+\multirow{3}{*}{-O0}
+ & 1 & 0.0977 & 0.1654 & 0.0574 \\
+ & 2 & 0.1058 & 0.1655 & 0.0589 \\
+ & 3 & 0.0891 & 0.1629 & 0.0580 \\
+\midrule
+\multirow{3}{*}{-O2}
+ & 1 & 0.0558 & 0.0526 & 0.0369 \\
+ & 2 & 0.0561 & 0.0524 & 0.0353 \\
+ & 3 & 0.0565 & 0.0515 & 0.0363 \\
+\midrule
+\multirow{3}{*}{-O3}
+ & 1 & 0.0571 & 0.0515 & 0.0355 \\
+ & 2 & 0.0567 & 0.0516 & 0.0361 \\
+ & 3 & 0.0566 & 0.0535 & 0.0364 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Tempos médios (s) e speedup do Laço 3 em relação ao Laço 2}
+\label{tab:medias}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Otimização} & \textbf{Laço 1 (s)} & \textbf{Laço 2 (s)} & \textbf{Laço 3 (s)} & \textbf{Speedup (L2/L3)} \\
+\midrule
+-O0 & 0.0975 & 0.1646 & 0.0581 & 2.83$\times$ \\
+-O2 & 0.0561 & 0.0522 & 0.0362 & 1.44$\times$ \\
+-O3 & 0.0568 & 0.0522 & 0.0360 & 1.45$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Adicionalmente, comparando o ganho absoluto proporcionado pela otimização do compilador (independentemente do estilo do código), tem-se, saindo de \texttt{-O0} para \texttt{-O2}:
+
+\begin{itemize}
+    \item Laço 1 (inicialização): speedup de aproximadamente $1.74\times$;
+    \item Laço 2 (soma dependente): speedup de aproximadamente $3.15\times$;
+    \item Laço 3 (múltiplos acumuladores): speedup de aproximadamente $1.60\times$.
+\end{itemize}
+
+Já entre \texttt{-O2} e \texttt{-O3}, os tempos ficaram praticamente idênticos (diferenças inferiores a 1\% em todos os laços), indicando que, para este código relativamente simples, o \texttt{-O2} já ativa a maior parte das otimizações relevantes.
+
+\section{Análise}
+
+\subsection{Laço 1 -- Ausência de dependência}
+
+No Laço 1, cada elemento do vetor é calculado exclusivamente a partir do índice \texttt{i}, sem depender de nenhum resultado anterior. Essa característica torna o laço trivialmente paralelizável: o compilador pode, a partir de \texttt{-O2}, aplicar vetorização automática (SIMD), processando vários elementos do vetor em uma única instrução, além de reordenar e sobrepor instruções livremente no pipeline. Isso explica o ganho expressivo de desempenho ($1.74\times$) ao sair de \texttt{-O0} para \texttt{-O2}.
+
+\subsection{Laço 2 -- Dependência serial forte}
+
+O Laço 2 apresenta uma dependência de dados verdadeira (RAW) entre iterações consecutivas: o valor de \texttt{soma} após a iteração $i$ é necessário para calcular a iteração $i+1$. Essa cadeia serial impede que as instruções de adição sejam executadas fora de ordem ou sobrepostas de forma significativa, mesmo que o processador possua múltiplas unidades aritméticas livres -- o gargalo não é a disponibilidade de hardware, mas a \emph{latência} da cadeia de dependência.
+
+Curiosamente, esse foi o laço que mais se beneficiou da otimização do compilador em termos relativos ($3.15\times$ de \texttt{-O0} para \texttt{-O2}). Isso ocorre porque em \texttt{-O0} o compilador gera código extremamente literal, sem sequer manter a variável acumuladora em registrador entre iterações, gerando muitas operações redundantes de leitura/escrita em memória. Já em \texttt{-O2}/\texttt{-O3}, o GCC aplica otimizações como \textit{register allocation} eficiente e, sob a flag \texttt{-ffast-math} (não usada aqui) poderia até reassociar a soma; mesmo sem essa flag, o compilador reduz drasticamente o overhead de acesso à memória, mas a dependência estrutural entre as somas permanece, o que explica por que o Laço 2 continua sendo o mais lento dos três mesmo nos níveis mais altos de otimização.
+
+\subsection{Laço 3 -- Quebra da dependência com múltiplos acumuladores}
+
+Ao dividir a soma em quatro variáveis independentes (\texttt{s0}, \texttt{s1}, \texttt{s2}, \texttt{s3}), o Laço 3 substitui uma única cadeia de dependência longa por quatro cadeias mais curtas e independentes entre si. Isso permite que o processador execute as quatro somas em paralelo, aproveitando melhor as unidades funcionais de ponto flutuante disponíveis e escondendo a latência de cada adição individual atrás da execução das demais.
+
+O resultado é consistente em todos os níveis de otimização: o Laço 3 é sempre mais rápido que o Laço 2, com speedups de $2.83\times$ (\texttt{-O0}), $1.44\times$ (\texttt{-O2}) e $1.45\times$ (\texttt{-O3}). É interessante notar que a vantagem relativa do Laço 3 é \emph{maior} em \texttt{-O0}: sem nenhuma otimização automática, a estrutura do código-fonte (quantas cadeias de dependência independentes existem) é o único fator que determina o quanto de ILP pode ser explorado, já que o compilador não reescreve o código. Em \texttt{-O2}/\texttt{-O3}, parte do ganho que o programador obteria manualmente já é parcialmente alcançada pelo compilador ao otimizar o Laço 2 (por exemplo, mantendo o acumulador em registrador e otimizando o acesso à memória), o que reduz — mas não elimina — a vantagem relativa do Laço 3.
+
+\subsection{O que cada nível de otimização faz}
+
+\begin{itemize}
+    \item \textbf{-O0 (sem otimização):} o GCC gera código de forma direta e literal, sem reordenar instruções, sem manter variáveis em registradores entre iterações do laço quando isso não é trivial, e sem aplicar vetorização. É o nível que melhor expõe o comportamento ``cru'' do código-fonte, e por isso é o que mais penaliza o laço com dependência forte (Laço 2) e mais valoriza a estrutura de múltiplos acumuladores (Laço 3).
+    \item \textbf{-O2 (otimização padrão para produção):} ativa um conjunto amplo de otimizações, como alocação eficiente de registradores, eliminação de código morto, \textit{inlining} de funções pequenas, desenrolamento de laços (\textit{loop unrolling}) e vetorização automática (auto-vectorization) quando não há dependências que a impeçam. É nesse nível que se observa o maior salto de desempenho em relação a \texttt{-O0}, especialmente no Laço 2, cuja dependência de dados limita — mas não impede — os ganhos de eficiência na geração de código.
+    \item \textbf{-O3 (otimização agressiva):} inclui todas as otimizações de \texttt{-O2} e adiciona transformações mais agressivas, como vetorização mais ampla, melhor desenrolamento de laços e otimizações de \textit{tree vectorization}. Neste experimento, porém, os tempos entre \texttt{-O2} e \texttt{-O3} foram praticamente idênticos, o que sugere que, para laços tão simples e regulares como estes, \texttt{-O2} já captura a maior parte dos benefícios de vetorização e ILP possíveis, e as otimizações adicionais de \texttt{-O3} não encontram mais oportunidades relevantes de melhoria neste código específico.
+\end{itemize}
+
+\section{Conclusão}
+
+Os resultados confirmam experimentalmente que dependências verdadeiras entre iterações de um laço (Laço 2) limitam severamente a exploração do paralelismo ao nível de instrução, mesmo em processadores com múltiplas unidades funcionais e mesmo sob otimização agressiva do compilador. Por outro lado, reestruturar o código para quebrar essa dependência em múltiplas cadeias independentes (Laço 3) permite ao hardware — e ao compilador, quando aplicável — explorar esse paralelismo de forma mais efetiva, resultando em speedups consistentes em todos os níveis de otimização testados.
+
+Além disso, observou-se que grande parte do ganho de desempenho de \texttt{-O0} para \texttt{-O2} vem da geração de código mais eficiente pelo compilador (uso de registradores, eliminação de acessos redundantes à memória, vetorização automática), mas que essas otimizações automáticas não conseguem eliminar completamente o custo de uma dependência de dados verdadeira imposta pela lógica do algoritmo. Isso reforça a importância de o programador estar ciente de como o estilo do código-fonte — em particular, a presença ou ausência de dependências entre iterações — impacta diretamente a capacidade do processador (e do compilador) de explorar o paralelismo ao nível de instrução, independentemente do nível de otimização utilizado na compilação.
+
+\newpage
+\appendix
+
+\section{Código-Fonte}
+\label{sec:codigo}
+
+Código utilizado para gerar os resultados apresentados neste relatório.
+
+\lstinputlisting[style=cstyle, caption={Programa em C utilizado para o experimento de ILP.}, label={cod:fonte}]{../src/ilp_pipeline.c}
+
+\end{document}

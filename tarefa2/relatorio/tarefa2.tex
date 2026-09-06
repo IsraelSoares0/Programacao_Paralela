@@ -57,8 +57,8 @@
 }
 
 \title{Multiplicação de Matriz por Vetor: \\ Localidade Temporal e Espacial no Acesso à Memória}
-\author{}
-\date{1 de setembro de 2026}
+\author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
+\date{}
 
 \begin{document}
 
@@ -95,9 +95,7 @@ relógio do sistema. Para cada tamanho de matriz $N$ (variando entre $64$ e
 $16384$, em potências de 2), cada versão foi executada 5 vezes, sendo
 registrado o menor tempo obtido, de forma a reduzir o ruído de medição causado
 por outras tarefas do sistema operacional. O código completo, compilado com
-\texttt{gcc -O2 -o mxv mxv.c}, é apresentado no Código~\ref{lst:mxv}.
-
-\lstinputlisting[style=cstyle, caption={Código-fonte \texttt{tarefa2.c} -- multiplicação matriz-vetor com dois padrões de acesso à memória.}, label={lst:mxv}]{../codigo/tarefa2.c}
+\texttt{gcc -O2 -o tarefa2 tarefa2.c}, é apresentado no Código~\ref{lst:tarefa2}.
 
 \section{Resultados}
 
@@ -204,3 +202,15 @@ de acesso à memória -- se repete em diversas áreas da computação:
     redes neurais) são altamente sensíveis à ordem de acesso à memória; por
     isso, frameworks como cuDNN e cuBLAS investem pesadamente em otimizações de
     localidade de memória
+\end{itemize}
+
+\newpage
+\appendix
+
+\section{Código-Fonte}
+
+Código utilizado para gerar os resultados apresentados neste relatório.
+
+\lstinputlisting[style=cstyle, caption={Código-fonte \texttt{tarefa2.c} -- multiplicação matriz-vetor com dois padrões de acesso à memória.}, label={lst:tarefa2}]{../src/tarefa2.c}
+
+\end{document}

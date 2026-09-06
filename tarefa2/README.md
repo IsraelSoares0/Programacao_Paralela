@@ -13,3 +13,11 @@ Implemente duas versões da multiplicação de matriz por vetor (MxV) em C:
 Meça o tempo de execução de cada versão usando uma função apropriada e execute testes com matrizes de diferentes tamanhos.
 
 Identifique a partir de que tamanho os tempos passam a divergir significativamente e explique por que isso ocorre, relacionando suas observações ao uso da memória cache e ao padrão de acesso à memória.
+
+Compilação: 
+
+- `gcc -O2 -o mxv mxv.c`
+
+Execução: 
+
+- `./mxv`
