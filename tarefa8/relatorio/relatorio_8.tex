@@ -1,0 +1,222 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{adjustbox}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\lstlistingname}{Código}
+
+% ---------- Configuração do realce de sintaxe (C) ----------
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{framecolor}{RGB}{200,200,200}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{gray},
+    numbers=left,
+    numbersep=6pt,
+    frame=single,
+    rulecolor=\color{framecolor},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    columns=flexible,
+    morekeywords={size_t},
+    extendedchars=true,
+    literate=
+        {á}{{\'a}}1 {à}{{\`a}}1 {â}{{\^a}}1 {ã}{{\~a}}1
+        {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1
+        {ó}{{\'o}}1 {ô}{{\^o}}1 {õ}{{\~o}}1
+        {ú}{{\'u}}1 {ü}{{\"u}}1 {ç}{{\c c}}1
+        {Á}{{\'A}}1 {À}{{\`A}}1 {Â}{{\^A}}1 {Ã}{{\~A}}1
+        {É}{{\'E}}1 {Ê}{{\^E}}1 {Í}{{\'I}}1
+        {Ó}{{\'O}}1 {Ô}{{\^O}}1 {Õ}{{\~O}}1
+        {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
+}
+
+\title{Estimativa Estocástica de $\pi$ com OpenMP: Acumulação por \texttt{critical} versus Vetor Compartilhado}
+\author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Introdução}
+
+Este relatório analisa quatro versões de um programa em C/OpenMP que estima $\pi$ pelo método de Monte
+Carlo: sorteiam-se pontos $(x,y)$ no quadrado $[0,1]\times[0,1]$ e verifica-se quantos caem dentro do
+quarto de círculo unitário ($x^2+y^2 \le 1$); a razão entre acertos e total de pontos converge para
+$\pi/4$.
+
+O objetivo é comparar duas formas de acumular os acertos de cada thread -- variável privada somada a um
+total global via \texttt{\#pragma omp critical}, ou vetor compartilhado com uma posição por thread e soma
+serial ao final -- combinadas com dois geradores de números aleatórios: \texttt{rand()} (estado global,
+não thread-safe por padrão) e um gerador com estado privado por thread. A análise explica os tempos
+observados com base em coerência de cache e falso compartilhamento (\textit{false sharing}).
+
+\section{Metodologia}
+
+O programa implementa quatro variantes, todas com o laço de amostragem distribuído via
+\texttt{\#pragma omp for}:
+
+\begin{enumerate}
+    \item \textbf{V1 -- \texttt{rand()} + critical}: contador local por thread, somado ao total global em
+    um bloco \texttt{critical} ao final da região paralela.
+    \item \textbf{V2 -- \texttt{rand()} + vetor}: cada thread grava seu contador local em \texttt{acertos\_por
+    \_thread[id]}; 
+    a soma é feita em laço serial após a região paralela.
+    \item \textbf{V3 -- Xorshift32 + critical}: igual a V1, trocando \texttt{rand()} por um gerador
+    Xorshift32 com semente privada por thread.
+    \item \textbf{V4 -- Xorshift32 + vetor}: igual a V2, também com Xorshift32.
+\end{enumerate}
+
+Como o ambiente é Windows e \texttt{rand\_r()} é uma função POSIX indisponível no MinGW
+/MSVC, ela foi
+substituída por um Xorshift32 com estado (semente) puramente privado por thread -- preservando a
+característica central que se quer testar: um gerador sem estado global compartilhado.
+
+O programa foi executado com $8$ threads, para $n\_pontos$ de $10^5$ a $10^9$ (passos $\times 10$),
+medindo o tempo de cada versão com \texttt{omp\_get\_wtime()}. O código completo está no
+Apêndice~\ref{sec:codigo}.
+
+\section{Resultados}
+
+\begin{lstlisting}[style=cstyle, language=, numbers=none, caption={Saída da execução com 8 threads}, label={lst:saida}]
+===============================================================
+        ESTIMATIVA DE PI - METODO DE MONTE CARLO
+===============================================================
+PI_REAL = 3.141592653589793
+Threads = 8
+Intervalo de n_pontos = 100000 ate 1000000000
+
+N_PONTOS     VERSAO   PI_MEDIDO    ERRO_ABS     ERRO_REL(%)  TEMPO(s)
+--------------------------------------------------------------------------
+100000       1        3.11740000   0.02419265   0.770076     0.0020
+100000       2        3.13556000   0.00603265   0.192025     0.0010
+100000       3        3.13220000   0.00939265   0.298977     0.0000
+100000       4        3.13220000   0.00939265   0.298977     0.0000
+--------------------------------------------------------------------------
+1000000      1        3.13700000   0.00459265   0.146189     0.0060
+1000000      2        3.14625600   0.00466335   0.148439     0.0050
+1000000      3        3.14120800   0.00038465   0.012244     0.0010
+1000000      4        3.14120800   0.00038465   0.012244     0.0000
+--------------------------------------------------------------------------
+10000000     1        3.14031280   0.00127985   0.040739     0.0990
+10000000     2        3.13953440   0.00205825   0.065516     0.0710
+10000000     3        3.14231040   0.00071775   0.022847     0.0100
+10000000     4        3.14231040   0.00071775   0.022847     0.0090
+--------------------------------------------------------------------------
+100000000    1        3.14113016   0.00046249   0.014722     0.4030
+100000000    2        3.14198412   0.00039147   0.012461     0.4460
+100000000    3        3.14182792   0.00023527   0.007489     0.0890
+100000000    4        3.14182792   0.00023527   0.007489     0.0830
+--------------------------------------------------------------------------
+1000000000   1        3.14143575   0.00015691   0.004994     4.0620
+1000000000   2        3.14160874   0.00001609   0.000512     4.1530
+1000000000   3        3.14157712   0.00001554   0.000495     0.7930
+1000000000   4        3.14157712   0.00001554   0.000495     0.7610
+--------------------------------------------------------------------------
+\end{lstlisting}
+
+\begin{table}[h]
+    \centering
+    \caption{Tempo de execução (s) por versão e por tamanho de amostra}
+    \label{tab:tempos}
+    \begin{adjustbox}{width=\textwidth}
+        \begin{tabular}{@{}lcccc@{}}
+            \toprule
+            \textbf{N\_PONTOS} & \textbf{V1: rand+critical} & \textbf{V2: rand+vetor} & \textbf{V3: xorshift+critical} & \textbf{V4: xorshift+vetor} \\
+            \midrule
+            $10^5$  & 0,0020 & 0,0010 & 0,0000 & 0,0000 \\
+            $10^6$  & 0,0060 & 0,0050 & 0,0010 & 0,0000 \\
+            $10^7$  & 0,0990 & 0,0710 & 0,0100 & 0,0090 \\
+            $10^8$  & 0,4030 & 0,4460 & 0,0890 & 0,0830 \\
+            $10^9$  & 4,0620 & 4,1530 & 0,7930 & 0,7610 \\
+            \bottomrule
+        \end{tabular}
+    \end{adjustbox}
+\end{table}
+
+O erro relativo cai com o aumento de $n\_pontos$ em todas as versões, como esperado de um estimador cuja
+incerteza decresce com $1/\sqrt{n}$. As quatro versões convergem para o mesmo $\pi$; a diferença relevante
+está nos tempos de execução.
+
+\section{Análise}
+
+\textbf{\texttt{rand()} vs. Xorshift32.} Esse é o fator que mais pesa nos tempos. Para $n\_pontos=10^9$,
+V1 e V2 (\texttt{rand()}) levam cerca de $4,1$s, contra apenas $0,76$--$0,79$s de V3 e V4 (Xorshift32) --
+uma diferença de $\sim 5,3\times$. A razão é que \texttt{rand()} mantém um único estado \emph{global},
+compartilhado por todas as threads, e o protege com sincronização interna a cada chamada. Como o laço
+chama \texttt{rand()} duas vezes por iteração, esse estado é lido/escrito centenas de milhões de vezes,
+e cada modificação obriga o protocolo de coerência de cache a invalidar e retransmitir a mesma linha de
+cache entre os núcleos (um caso de \emph{compartilhamento verdadeiro}). Isso serializa boa parte do
+trabalho que deveria ser paralelo. O Xorshift32, por outro lado, guarda sua semente como variável
+totalmente privada (registrador/pilha de cada thread), sem estado compartilhado, e por isso escala quase
+linearmente com o número de threads.
+
+\textbf{\texttt{critical} vs. vetor compartilhado.} Comparando V1/V2 e V3/V4, as diferenças são pequenas
+(ex.: $0,793$s vs.\ $0,761$s em V3/V4 para $10^9$). Isso ocorre porque, em ambas as versões, o contador é
+acumulado localmente (\texttt{acertos\_local}, em registrador) durante todo o laço de $n\_pontos$
+iterações; a sincronização -- seção crítica ou escrita no vetor -- acontece apenas \emph{uma vez por
+thread}, ao final. Como esse custo é $O(1)$ por thread e não $O(n\_pontos)$, ele é irrelevante frente ao
+custo de gerar e testar centenas de milhões de pontos, e por isso a escolha entre as duas estratégias
+pouco altera o tempo total.
+
+\textbf{Por que quase não há falso compartilhamento.} O vetor \texttt{acertos\_por\_thread} é de
+\texttt{long long} (8 bytes); como uma linha de cache tem 64 bytes, até 8 contadores de threads vizinhas
+compartilham a mesma linha. Se cada thread escrevesse em \texttt{acertos\_por
+\_thread[id]} \emph{a cada
+iteração} do laço, haveria falso compartilhamento severo (invalidações constantes da linha entre threads
+que não compartilham dado algum, apenas a linha de cache). Mas no código essa escrita ocorre só
+\emph{uma vez}, após o laço paralelo -- então o número de possíveis invalidações é da ordem do número de
+threads ($8$), não de $n\_pontos$ (até $10^9$). É por isso que V2 e V4 não são mais lentas que V1 e V3:
+o padrão de acesso ao vetor é raro demais para que o falso compartilhamento apareça no tempo medido.
+
+\textbf{Resumo.} Para $10^9$ pontos: V4 ($0,761$s) $<$ V3 ($0,793$s) $\ll$ V1 ($4,062$s) $<$ V2
+($4,153$s). Os dois níveis de desempenho, bem separados, mostram que o gerador aleatório (estado global vs.\
+privado) é o fator dominante; a estratégia de acumulação (\texttt{critical} vs.\ vetor) é secundária.
+
+\section{Conclusão}
+
+O gargalo de desempenho não está na acumulação dos resultados parciais, mas na geração dos números
+aleatórios. Um gerador com estado global (\texttt{rand()}) precisa de sincronização a cada chamada, o que
+gera tráfego intenso de coerência de cache entre os núcleos e serializa boa parte do programa. Um gerador
+com estado privado por thread (Xorshift32, usado aqui no lugar de \texttt{rand\_r()}, indisponível no
+Windows) elimina esse problema e escala quase linearmente. Já \texttt{critical} e vetor compartilhado se
+mostraram equivalentes, pois ambos custam apenas uma operação por thread, e não uma por iteração --
+inclusive o vetor, apesar de compartilhar linhas de cache entre threads, não sofre falso compartilhamento
+relevante por ser acessado tão raramente. A lição geral é que o estado verdadeiramente compartilhado (aqui,
+o gerador de números aleatórios) é o que determina a escalabilidade, muito mais do que pequenas seções
+críticas ou vetores usados com moderação.
+
+\newpage
+\appendix
+
+\section{Código-Fonte}
+\label{sec:codigo}
+
+O código-fonte completo utilizado nesta atividade está disponível abaixo.
+
+\lstinputlisting[style=cstyle, caption={Código-fonte completo (\texttt{pi\_monte\_carlo\_omp.c})}]{../src/pi_monte_carlo_omp.c}
+
+\end{document}
