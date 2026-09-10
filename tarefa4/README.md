@@ -7,6 +7,6 @@ Implemente dois programas paralelos em C com OpenMP:
 
 Paralelize com:
 
-    #pragma omp parallel for
+`#pragma omp parallel for`
 
-e meça o tempo de execução variando o número de threads. Analise quando o desempenho melhora, estabiliza ou piora, e reflita sobre como o multithreading de hardware pode ajudar em programas memory-bound, mas atrapalhar em programas compute-bound pela competição por recursos.
+Meça o tempo de execução variando o número de threads. Analise quando o desempenho melhora, estabiliza ou piora, e reflita sobre como o multithreading de hardware pode ajudar em programas memory-bound, mas atrapalhar em programas compute-bound pela competição por recursos.

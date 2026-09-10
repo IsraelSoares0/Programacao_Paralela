@@ -1,0 +1,310 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+
+\geometry{margin=2.5cm}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\lstlistingname}{Código}
+
+
+
+% ---------- Configuração do realce de sintaxe (C) ----------
+
+\definecolor{codebg}{RGB}{247,247,247}
+\definecolor{codekw}{RGB}{0,0,180}
+\definecolor{codecomment}{RGB}{0,128,0}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{framecolor}{RGB}{200,200,200}
+
+\lstdefinestyle{cstyle}{
+    language=C,
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{codekw}\bfseries,
+    commentstyle=\color{codecomment}\itshape,
+    stringstyle=\color{codestring},
+    numberstyle=\tiny\color{gray},
+    numbers=left,
+    numbersep=6pt,
+    frame=single,
+    rulecolor=\color{framecolor},
+    breaklines=true,
+    breakatwhitespace=false,
+    showstringspaces=false,
+    tabsize=4,
+    captionpos=b,
+    columns=flexible,
+    morekeywords={size_t},
+    extendedchars=true,
+    literate=
+        {á}{{\'a}}1 {à}{{\`a}}1 {â}{{\^a}}1 {ã}{{\~a}}1
+        {é}{{\'e}}1 {ê}{{\^e}}1 {í}{{\'i}}1
+        {ó}{{\'o}}1 {ô}{{\^o}}1 {õ}{{\~o}}1
+        {ú}{{\'u}}1 {ü}{{\"u}}1 {ç}{{\c c}}1
+        {Á}{{\'A}}1 {À}{{\`A}}1 {Â}{{\^A}}1 {Ã}{{\~A}}1
+        {É}{{\'E}}1 {Ê}{{\^E}}1 {Í}{{\'I}}1
+        {Ó}{{\'O}}1 {Ô}{{\^O}}1 {Õ}{{\~O}}1
+        {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
+}
+
+
+
+\title{Tarefa 4: Aplicações limitadas por memória ou CPU}
+\author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Introdução}
+
+Este relatório apresenta a implementação e a análise de dois programas paralelos
+em C, utilizando a biblioteca OpenMP, com o objetivo de contrastar dois padrões
+distintos de gargalo computacional: aplicações \emph{memory-bound} (limitadas
+pela banda de memória) e aplicações \emph{compute-bound} (limitadas pela
+capacidade de processamento aritmético da CPU).
+
+O primeiro programa realiza uma soma simples de vetores, operação de baixíssima
+intensidade aritmética e alto volume de dados, representativa de cargas
+limitadas por memória. O segundo programa aplica uma sequência de operações
+matemáticas (\texttt{sin}, \texttt{cos}, \texttt{sqrt}) repetidas diversas vezes
+sobre um vetor bem menor, representando uma carga limitada pela capacidade de
+cálculo da CPU. Ambos foram paralelizados com a diretiva
+\texttt{\#pragma omp parallel for} e medidos variando o número de threads
+(1, 2, 4, 8 e 16), a fim de observar como cada tipo de aplicação responde ao
+aumento de paralelismo e, em particular, ao paralelismo de hardware
+disponível acima do número de núcleos físicos.
+
+A máquina utilizada nos testes possui \textbf{14 núcleos físicos e 20
+processadores lógicos}. Esse número não é explicado por uma arquitetura
+homogênea com Hyper-Threading simples (o que exigiria um número par de
+threads por núcleo), mas sim por uma \textbf{arquitetura híbrida} (como as
+CPUs Intel de 12\textsuperscript{a}/13\textsuperscript{a} geração, no estilo
+\emph{Performance-cores} + \emph{Efficiency-cores}): considerando que apenas
+os núcleos de desempenho (P-cores) possuem Hyper-Threading (2 threads cada) e
+os núcleos de eficiência (E-cores) possuem apenas 1 thread cada, a única
+combinação que resulta em 14 núcleos e 20 threads é
+$6~\text{P-cores} \times 2 + 8~\text{E-cores} \times 1 = 12 + 8 = 20$ threads,
+com $6 + 8 = 14$ núcleos físicos. Essa heterogeneidade de núcleos é essencial
+para interpretar corretamente os resultados de escalabilidade apresentados
+neste relatório.
+
+\section{Metodologia}
+
+Os dois programas foram escritos em C e paralelizados com OpenMP utilizando
+exclusivamente a diretiva \texttt{\#pragma omp parallel for schedule(static)},
+sem uso de \texttt{reduction}, já que cada iteração escreve em uma posição de
+vetor independente, não havendo condição de corrida.
+
+\begin{itemize}
+    \item \textbf{Programa 1 (\texttt{memory\_bound.c})}: aloca três vetores de
+    \texttt{double} de tamanho $n = 60{.}000{.}000$ (aproximadamente 480~MB por
+    vetor) e executa a operação elemento a elemento $c[i] = a[i] + b[i]$.
+    A intensidade aritmética é mínima (uma soma para dois acessos de leitura e
+    um de escrita), de modo que o tempo de execução é dominado pelo tráfego
+    entre a CPU e a memória principal.
+
+    \item \textbf{Programa 2 (\texttt{compute\_bound.c})}: aloca vetores bem
+    menores ($n = 2{.}000{.}000$ elementos) e, para cada elemento, executa um
+    laço interno de 400 iterações contendo chamadas a \texttt{sin}, \texttt{cos}
+    e \texttt{sqrt}. A intensidade aritmética é alta e o volume de dados é
+    pequeno o suficiente para caber majoritariamente em cache, de modo que o
+    tempo de execução é dominado pela capacidade de cálculo das unidades de
+    ponto flutuante.
+\end{itemize}
+
+Em ambos os programas, os vetores de entrada são inicializados dentro de uma
+região paralela com o mesmo \texttt{schedule(static)} usado no laço medido,
+garantindo a política de \emph{first-touch}. 
+A medição de tempo utiliza \texttt{omp\_get\_wtime()}
+(tempo de parede), e cada configuração é executada 5 vezes, sendo reportado o
+melhor tempo (\texttt{best}) entre as repetições.
+
+Os programas foram compilados com:
+\begin{lstlisting}[style=cstyle, language=bash, numbers=none]
+gcc -fopenmp -O2 memory_bound.c  -o memory_bound  -lm
+gcc -fopenmp -O2 compute_bound.c -o compute_bound -lm
+\end{lstlisting}
+
+e executados para $1$, $2$, $4$, $8$ e $16$ threads, mantendo os demais
+parâmetros fixos (tamanho do vetor, número de iterações internas e número de
+repetições).
+
+\subsection{Identificação do hardware}
+
+Antes de interpretar os resultados, foi executado um pequeno programa de
+diagnóstico (Apêndice~\ref{sec:cpu_info}) que consulta
+\texttt{omp\_get\_num\_procs()} e \texttt{omp\_get\_max\_threads()} para
+determinar quantos processadores lógicos o OpenMP enxerga por padrão. A
+saída obtida foi:
+
+\begin{lstlisting}[style=cstyle, language=bash, numbers=none]
+Number of available cores: 20
+Max OpenMP threads: 20
+Running with 20 active threads
+\end{lstlisting}
+
+Combinando essa saída com a informação fornecida pelo fabricante/sistema
+operacional de que a máquina possui \textbf{14 núcleos físicos}, conclui-se
+que se trata de uma CPU com arquitetura híbrida (núcleos de desempenho e de
+eficiência), e não de uma CPU homogênea com Hyper-Threading simples em todos
+os núcleos. Essa distinção é retomada na Seção~\ref{sec:analise} para
+explicar o comportamento do programa compute-bound.
+
+\section{Resultados}
+
+As Tabelas~\ref{tab:memoria} e \ref{tab:compute} apresentam o melhor tempo de
+execução (em segundos) obtido para cada número de threads, junto com o
+\emph{speedup} (em relação à execução com 1 thread) e a eficiência paralela
+($\text{speedup}/\text{threads}$).
+
+\begin{table}[h]
+    \centering
+    \caption{Resultados do programa memory-bound ($n = 60.000.000$ elementos)}
+    \label{tab:memoria}
+    \begin{tabular}{ccccc}
+        \toprule
+        Threads & Tempo (s) & Speedup & Eficiência (\%) \\
+        \midrule
+        1  & 0.047 & 1.00$\times$ & 100.0 \\
+        2  & 0.032 & 1.47$\times$ & 73.4  \\
+        4  & 0.021 & 2.24$\times$ & 56.0  \\
+        8  & 0.021 & 2.24$\times$ & 28.0  \\
+        16 & 0.020 & 2.35$\times$ & 14.7  \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[h]
+    \centering
+    \caption{Resultados do programa compute-bound ($n = 2.000.000$ elementos)}
+    \label{tab:compute}
+    \begin{tabular}{ccccc}
+        \toprule
+        Threads & Tempo (s) & Speedup & Eficiência (\%) \\
+        \midrule
+        1  & 14.381 & 1.00$\times$  & 100.0 \\
+        2  & 7.157  & 2.01$\times$  & 100.5 \\
+        4  & 3.600  & 4.00$\times$  & 99.9  \\
+        8  & 1.964  & 7.32$\times$  & 91.5  \\
+        16 & 1.167  & 12.32$\times$ & 77.0  \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Observa-se um comportamento claramente distinto entre os dois programas:
+o programa compute-bound apresenta \emph{speedup} praticamente linear até 8
+threads, ao passo que o programa memory-bound satura rapidamente, já
+apresentando ganhos marginais a partir de 4 threads e nenhum ganho relevante
+entre 4 e 8 threads.
+
+\section{Análise}
+\label{sec:analise}
+
+\subsection{Programa memory-bound}
+
+A operação $c[i] = a[i] + b[i]$ tem intensidade aritmética muito baixa
+(duas leituras e uma escrita para cada soma), então o gargalo não é a CPU, e
+sim a banda de memória, um recurso compartilhado por todos os núcleos. Por
+isso a eficiência já cai de 100\% para 73{,}4\% com apenas 2 threads e a
+banda satura por volta de 4 threads: o tempo com 4 e com 8 threads é
+praticamente o mesmo (0{,}021~s). O pequeno ganho entre 8 e 16 threads
+(2{,}24$\times$ para 2{,}35$\times$) é irrelevante frente aos tempos curtos
+medidos (dezenas de milissegundos) e pode ser atribuído a ruído.
+
+\subsection{Programa compute-bound}
+
+A máquina de testes tem 14 núcleos físicos e 20 threads lógicas, divididos
+em 6 P-cores (rápidos, com Hyper-Threading) e 8 E-cores (mais lentos, sem
+Hyper-Threading). Isso explica a curva de eficiência em duas etapas:
+ 
+\textbf{Até 8 threads}, ainda há núcleos físicos livres, então a eficiência
+se mantém alta (100\% até 4 threads, 91{,}5\% em 8). A pequena queda em 8
+threads já sugere que parte delas foi parar nos E-cores, mais lentos que os
+P-cores.
+ 
+\textbf{Em 16 threads}, a eficiência cai mais (77{,}0\%) por dois motivos
+somados: mais threads rodando nos E-cores mais lentos, e o fato de 16
+ultrapassar os 14 núcleos físicos, obrigando algumas threads a dividir um
+mesmo P-core via Hyper-Threading — disputando a mesma FPU e a mesma cache.
+Ainda assim o speedup continua crescendo (7{,}32$\times$ para
+12{,}32$\times$), pois os E-cores ainda somam capacidade real de cálculo, só
+que bem abaixo do que se teria com 16 núcleos físicos homogêneos.
+
+\subsection{Comparação entre os dois padrões}
+
+Os resultados confirmam a hipótese da atividade: threads de hardware
+(Hyper-Threading) ajudam mais em cargas memory-bound do que em cargas
+compute-bound.
+ 
+\begin{itemize}
+    \item \textbf{Memory-bound}: o Hyper-Threading poderia ajudar
+    preenchendo o tempo ocioso de uma thread esperando dados da memória, mas
+    aqui o gargalo de banda já aparece bem antes (4 threads, longe dos 14
+    núcleos físicos), então esse benefício nem chega a ser testado.
+    \item \textbf{Compute-bound}: como as unidades de execução já ficam
+    ocupadas o tempo todo, o Hyper-Threading só disputa recursos em vez de
+    ajudar, e a presença de E-cores mais lentos reduz ainda mais a
+    eficiência conforme mais threads são criadas.
+\end{itemize}
+ 
+Em resumo: o desempenho melhora quase linearmente enquanto há núcleos
+físicos livres; estabiliza quando a memória satura; e a eficiência cai
+progressivamente quando o paralelismo passa a depender de núcleos mais
+lentos (E-cores) ou de Hyper-Threading em núcleos já ocupados.
+
+\section{Conclusão}
+
+A implementação e os experimentos realizados permitiram observar de forma
+prática a diferença de comportamento entre aplicações limitadas por memória e
+aplicações limitadas por CPU quando paralelizadas com OpenMP. O programa
+memory-bound atingiu seu limite de escalabilidade rapidamente (por volta de 4
+threads), refletindo a saturação da banda de memória, um recurso
+compartilhado entre todos os núcleos, bem abaixo dos 14 núcleos físicos
+disponíveis na máquina de testes. Já o programa compute-bound escalou de
+forma quase linear enquanto pôde ocupar núcleos físicos distintos, e teve sua
+eficiência reduzida gradualmente à medida que (i) mais threads passaram a
+ser executadas nos núcleos de eficiência (E-cores), mais lentos, e (ii),
+acima de 14 threads, algumas delas passaram a compartilhar um mesmo núcleo
+de desempenho (P-core) via Hyper-Threading.
+ 
+Um resultado adicional relevante deste trabalho foi a constatação, por meio
+do programa de diagnóstico (\texttt{omp\_get\_num\_procs()}), de que a
+máquina utilizada não possui uma arquitetura homogênea de núcleos, mas sim
+uma arquitetura híbrida (P-cores + E-cores), com 14 núcleos físicos e 20
+threads lógicas. Isso demonstra, na prática, que a simples contagem de
+``processadores lógicos'' reportada pelo sistema operacional ou pelo OpenMP
+não é suficiente para prever o comportamento de escalabilidade de uma
+aplicação: é necessário também saber quantos desses processadores são
+núcleos físicos independentes, quantos compartilham recursos via
+Hyper-Threading, e se todos os núcleos físicos têm o mesmo desempenho.
+Esses resultados reforçam a importância de identificar tanto o tipo de
+gargalo de uma aplicação (CPU ou memória) quanto a topologia real do
+hardware disponível antes de decidir a estratégia de paralelização e o
+número de threads mais adequado.
+
+\newpage
+
+\appendix
+\section{Código-Fonte}
+
+\subsection{memory\_bound.c}
+\lstinputlisting[style=cstyle]{../src/memory_bound.c}
+
+\subsection{compute\_bound.c}
+\lstinputlisting[style=cstyle]{../src/compute_bound.c}
+
+\subsection{cpu\_info.c --- programa de diagnóstico de hardware}
+\label{sec:cpu_info}
+\lstinputlisting[style=cstyle]{../src/cpu_info.c}
+
+\end{document}

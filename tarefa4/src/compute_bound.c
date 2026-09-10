@@ -3,12 +3,6 @@
  * -----------------------------------------------------------------------
  * Benchmark COMPUTE-BOUND (CPU-bound): muitas operações matemáticas
  * (sin, cos, sqrt, potências) por elemento de um vetor pequeno/médio.
- *
- * Uso:
- *   ./compute_bound <num_threads> [tamanho_do_vetor] [iteracoes_internas] [repeticoes]
- *
- * Saída (CSV, uma linha):
- *   threads,tempo_segundos,elementos,iter_internas,repeticoes
  */
 
 #include <stdio.h>
@@ -68,7 +62,13 @@ int main(int argc, char **argv) {
     volatile double sink = out[0] + out[n / 2] + out[n - 1];
     (void) sink;
 
-    printf("%d,%.6f,%ld,%d,%d\n", threads, best, n, inner_iters, reps);
+    printf("%-10s %-12s %-15s %-12s %-10s\n",
+       "Threads", "Melhor", "Pontos", "Iter", "Reps");
+
+    printf("---------------------------------------------------------------\n");
+
+    printf("%-10d %-12.6f %-15ld %-12d %-10d\n",
+        threads, best, n, inner_iters, reps);
 
     free(a); free(out);
     return 0;

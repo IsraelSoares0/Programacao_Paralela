@@ -2,12 +2,6 @@
  * memory_bound.c
  * -----------------------------------------------------------------------
  * Benchmark MEMORY-BOUND: soma simples de vetores (c[i] = a[i] + b[i]).
- *
- * Uso:
- *   ./memory_bound <num_threads> [tamanho_do_vetor] [repeticoes]
- *
- * Saída (CSV, uma linha):
- *   threads,tempo_segundos,elementos,repeticoes
  */
 
 #include <stdio.h>
@@ -62,7 +56,13 @@ int main(int argc, char **argv) {
     volatile double sink = c[0] + c[n / 2] + c[n - 1];
     (void) sink;
 
-    printf("%d,%.6f,%ld,%d\n", threads, best, n, reps);
+    printf("%-10s %-12s %-15s %-10s\n",
+       "Threads", "Melhor", "Pontos", "Reps");
+
+    printf("---------------------------------------------------------------\n");
+
+    printf("%-10d %-12.6f %-15ld %-10d\n",
+        threads, best, n, reps);
 
     free(a); free(b); free(c);
     return 0;
