@@ -53,7 +53,7 @@
         {Ú}{{\'U}}1 {Ü}{{\"U}}1 {Ç}{{\c C}}1
 }
 
-\title{Estimativa Estocástica de $\pi$ com OpenMP: Acumulação por \texttt{critical} versus Vetor Compartilhado}
+\title{Tarefa 8: Coerência de Cache e Falso Compartilhamento}
 \author{Israel Soares de Castro Filho \\ Matrícula: 20250070780}
 \date{}
 
@@ -163,16 +163,29 @@ está nos tempos de execução.
 
 \section{Análise}
 
-\textbf{\texttt{rand()} vs. Xorshift32.} Esse é o fator que mais pesa nos tempos. Para $n\_pontos=10^9$,
-V1 e V2 (\texttt{rand()}) levam cerca de $4,1$s, contra apenas $0,76$--$0,79$s de V3 e V4 (Xorshift32) --
-uma diferença de $\sim 5,3\times$. A razão é que \texttt{rand()} mantém um único estado \emph{global},
-compartilhado por todas as threads, e o protege com sincronização interna a cada chamada. Como o laço
-chama \texttt{rand()} duas vezes por iteração, esse estado é lido/escrito centenas de milhões de vezes,
-e cada modificação obriga o protocolo de coerência de cache a invalidar e retransmitir a mesma linha de
-cache entre os núcleos (um caso de \emph{compartilhamento verdadeiro}). Isso serializa boa parte do
-trabalho que deveria ser paralelo. O Xorshift32, por outro lado, guarda sua semente como variável
-totalmente privada (registrador/pilha de cada thread), sem estado compartilhado, e por isso escala quase
-linearmente com o número de threads.
+\textbf{rand() vs. Xorshift32.} Esse é o fator que mais pesa nos tempos. Para
+$n\_pontos = 10^9$, V1 e V2 (\texttt{rand()}) levam cerca de $4,1\,\text{s}$,
+contra apenas $0,76$--$0,79\,\text{s}$ de V3 e V4 (Xorshift32) -- uma diferença
+de $\sim 5,3\times$. A razão é que \texttt{rand()} mantém um único estado
+global, compartilhado por todas as threads, \emph{sem nenhuma proteção
+explícita} contra acesso concorrente -- as chamadas simultâneas a
+\texttt{rand()} em V1 e V2 constituem, a rigor, uma condição de corrida,
+ já que múltiplas threads leem e escrevem a mesma variável
+de estado sem sincronização. Como o laço chama \texttt{rand()} duas vezes por
+iteração, esse estado é lido/escrito centenas de milhões de vezes, e cada
+escrita obriga o protocolo de coerência de cache a invalidar e retransmitir a
+mesma linha de cache entre os núcleos (um caso de compartilhamento verdadeiro).
+
+Isso serializa boa parte do trabalho que deveria ser paralelo -- não porque
+exista uma seção crítica formal protegendo o estado, mas porque o hardware
+precisa manter a coerência da linha de cache a cada acesso concorrente. Vale
+notar que essa condição de corrida em V1 e V2 é, tecnicamente, comportamento
+indefinido pela linguagem C; os resultados de $\pi$ obtidos continuam
+estatisticamente razoáveis porque o método de Monte Carlo tolera ruído nos
+números gerados, mas isso não deve ser confundido com um padrão de acesso
+seguro. O Xorshift32, por outro lado, guarda sua semente como variável
+totalmente privada (registrador/pilha de cada thread), sem estado
+compartilhado, e por isso escala quase linearmente com o número de threads.
 
 \textbf{\texttt{critical} vs. vetor compartilhado.} Comparando V1/V2 e V3/V4, as diferenças são pequenas
 (ex.: $0,793$s vs.\ $0,761$s em V3/V4 para $10^9$). Isso ocorre porque, em ambas as versões, o contador é
@@ -198,16 +211,21 @@ privado) é o fator dominante; a estratégia de acumulação (\texttt{critical} 
 
 \section{Conclusão}
 
-O gargalo de desempenho não está na acumulação dos resultados parciais, mas na geração dos números
-aleatórios. Um gerador com estado global (\texttt{rand()}) precisa de sincronização a cada chamada, o que
-gera tráfego intenso de coerência de cache entre os núcleos e serializa boa parte do programa. Um gerador
-com estado privado por thread (Xorshift32, usado aqui no lugar de \texttt{rand\_r()}, indisponível no
-Windows) elimina esse problema e escala quase linearmente. Já \texttt{critical} e vetor compartilhado se
-mostraram equivalentes, pois ambos custam apenas uma operação por thread, e não uma por iteração --
-inclusive o vetor, apesar de compartilhar linhas de cache entre threads, não sofre falso compartilhamento
-relevante por ser acessado tão raramente. A lição geral é que o estado verdadeiramente compartilhado (aqui,
-o gerador de números aleatórios) é o que determina a escalabilidade, muito mais do que pequenas seções
-críticas ou vetores usados com moderação.
+O gargalo de desempenho não está na acumulação dos resultados parciais, mas na
+geração dos números aleatórios. Um gerador com estado global (\texttt{rand()}),
+acessado concorrentemente sem qualquer proteção, sofre uma condição de corrida
+que gera tráfego intenso de coerência de cache entre os núcleos e serializa
+boa parte do programa. Um gerador com estado privado por thread elimina
+esse problema e escala quase linearmente. 
+
+Já \texttt{critical} e vetor
+compartilhado se mostraram equivalentes, pois ambos custam apenas uma operação
+por thread, e não uma por iteração -- inclusive o vetor, apesar de
+compartilhar linhas de cache entre threads, não sofre falso compartilhamento
+relevante por ser acessado tão raramente. A lição geral é que o estado
+verdadeiramente compartilhado (aqui, o gerador de números aleatórios) é o que
+determina a escalabilidade, muito mais do que pequenas seções críticas ou
+vetores usados com moderação.
 
 \newpage
 \appendix
